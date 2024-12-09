@@ -13,9 +13,9 @@ use tokio::{
     time::sleep,
 };
 
-const CONFIGURATION_FILEPATH: &str = "./configuration.toml";
-const PROXY_LIST_FILEPATH: &str = "./proxy.conf";
-const SECRET_FILEPATH: &str = "./secret";
+const CONFIGURATION_FILEPATH: &str = "/conf/config.toml";
+const PROXY_LIST_FILEPATH: &str = "/conf/proxy.conf";
+const SECRET_FILEPATH: &str = "/conf/secret";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -249,7 +249,7 @@ async fn main() -> Result<()> {
     }
 
     // 构建命令
-    let mut command = String::from("./mtproto-proxy -u nobody");
+    let mut command = String::from("/mtproto-proxy -u nobody");
     command.push_str(&format!(" -H {}", config.port));
 
     if config.port_stats > 0 {
