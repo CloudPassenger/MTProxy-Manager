@@ -16,6 +16,7 @@ use tokio::{
 const CONFIGURATION_FILEPATH: &str = "/conf/config.toml";
 const PROXY_LIST_FILEPATH: &str = "/conf/proxy.conf";
 const SECRET_FILEPATH: &str = "/conf/secret";
+const MTPROXY_BIN: &str = "/mtproto-proxy";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -114,8 +115,9 @@ struct MtprotoProxy {
 }
 
 impl MtprotoProxy {
-    async fn new(command: &str, update_hours: u64) -> Result<Self> {
+    async fn new(command: &str, args: &[&str], update_hours: u64) -> Result<Self> {
         let process = tokio::process::Command::new(command)
+            .args(args)
             .spawn()
             .context("Failed to start mtproto-proxy")?;
 
@@ -247,23 +249,32 @@ async fn main() -> Result<()> {
     }
 
     // 构建命令
-    let mut command = String::from("/mtproto-proxy -u nobody");
-    command.push_str(&format!(" -H {}", config.port));
+    let command = MTPROXY_BIN.to_string();
+    let config_port_str = config.port.to_string();
+    let port_stats_str = config.port_stats.to_string();
+    let local_ip = local_ip()?;
+    let nat_info = format!("{}:{}", local_ip, config.ip);
+    
+    let mut args: Vec<&str> = vec!["-u", "nobody", "-H", &config_port_str];
 
     if config.port_stats > 0 {
         println!("Serving HTTP stats on {} port. Accessible only via loopback", config.port_stats);
-        command.push_str(&format!(" -p {} --http-stats", config.port_stats));
+        args.push("-p");
+        args.push(&port_stats_str);
+        args.push("--http-stats");
     }
 
     if !config.tag.is_empty() {
         println!("Advertising tag configured: {}", config.tag);
-        command.push_str(&format!(" -P {}", config.tag));
+        args.push("-P");
+        args.push(&config.tag);
     }
 
     // 处理 Fake-TLS Domain
     let fake_tls_hex = if !config.fake_tls_domain.is_empty() {
         println!("Using {} for FakeTLS", config.fake_tls_domain);
-        command.push_str(&format!(" -D {}", config.fake_tls_domain));
+        args.push("-D");
+        args.push(&config.fake_tls_domain);
         Some(hex::encode(config.fake_tls_domain.as_bytes()))
     } else {
         None
@@ -271,13 +282,13 @@ async fn main() -> Result<()> {
 
     // NAT 配置
     if !config.ip.is_empty() {
-        let local_ip = local_ip()?;
         if local_ip.to_string() != config.ip {
             println!(
                 "Configuring server to work behind the NAT: local {} vs global {}",
                 local_ip, config.ip
             );
-            command.push_str(&format!(" --nat-info {}:{}", local_ip, config.ip));
+            args.push("--nat-info");
+            args.push(&nat_info);
         }
     }
 
@@ -302,11 +313,14 @@ async fn main() -> Result<()> {
             }
         }
         println!("----------");
-        command.push_str(&format!(" -S {}", key));
+        args.push("-S");
+        args.push(key);
     }
 
     // 添加配置文件路径
-    command.push_str(&format!(" --aes-pwd {} {}", SECRET_FILEPATH, PROXY_LIST_FILEPATH));
+    args.push("--aes-pwd");
+    args.push(SECRET_FILEPATH);
+    args.push(PROXY_LIST_FILEPATH);
 
     // 更新配置文件
     config.new_keys = 0;
@@ -317,12 +331,13 @@ async fn main() -> Result<()> {
 
     // 主循环
     loop {
-        let mut proxy = MtprotoProxy::new(&command, config.update_hours).await?;
+        let mut proxy = MtprotoProxy::new(&command, &args, config.update_hours).await?;
         
         println!(
-            "Launching at {}:\n{}",
+            "Launching at {}:\n{} {}",
             Local::now().format("%Y-%m-%d %H:%M:%S"),
-            command
+            command,
+            args.join(" "),
         );
         println!(
             "Server will be interrupted after {:?}",
