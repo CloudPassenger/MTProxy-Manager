@@ -13,11 +13,12 @@ use tokio::{
     time::sleep,
 };
 
-const CONFIGURATION_FILEPATH: &str = "./configuration.json";
+const CONFIGURATION_FILEPATH: &str = "./configuration.toml";
 const PROXY_LIST_FILEPATH: &str = "./proxy.conf";
 const SECRET_FILEPATH: &str = "./secret";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
 struct Configuration {
     #[serde(default)]
     keys: Vec<String>,
@@ -184,8 +185,8 @@ async fn load_configuration() -> Result<Configuration> {
         .await
         .context("Failed to read configuration file")?;
 
-    // 解析 JSON
-    let config: Configuration = serde_json::from_str(&content)
+    // 解析 TOML
+    let config: Configuration = toml::from_str(&content)
         .context("Failed to parse configuration file")?;
 
     // 验证配置
@@ -210,10 +211,10 @@ fn validate_configuration(config: &Configuration) -> Result<()> {
 
 
 async fn save_configuration(config: &Configuration) -> Result<()> {
-    let config_json = serde_json::to_string_pretty(config)
+    let config_toml = toml::to_string_pretty(config)
         .context("Failed to serialize configuration")?;
     
-    fs::write(CONFIGURATION_FILEPATH, config_json)
+    fs::write(CONFIGURATION_FILEPATH, config_toml)
         .await
         .context("Failed to write configuration file")?;
     
