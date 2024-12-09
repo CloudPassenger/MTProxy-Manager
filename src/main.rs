@@ -115,9 +115,7 @@ struct MtprotoProxy {
 
 impl MtprotoProxy {
     async fn new(command: &str, update_hours: u64) -> Result<Self> {
-        let process = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
+        let process = tokio::process::Command::new(command)
             .spawn()
             .context("Failed to start mtproto-proxy")?;
 
